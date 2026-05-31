@@ -833,6 +833,31 @@ TEST(cypher_exec_count_distinct_issue239) {
     PASS();
 }
 
+/* issue #373: an unsupported computed expression in WITH/RETURN (function call
+ * like split(...) or list indexing [..]) must not desync the parser into a
+ * misleading default star projection (wrong columns f.name/.../.label, blank
+ * rows). The requested column shape is preserved; the unsupported expression
+ * projects empty while sibling aggregates still compute. */
+TEST(cypher_exec_unsupported_with_expr_resync_issue373) {
+    cbm_store_t *s = setup_cypher_store();
+
+    cbm_cypher_result_t r = {0};
+    int rc = cbm_cypher_execute(
+        s, "MATCH (f:Function) WITH split(f.name)[0] AS top, count(*) AS c RETURN top, c", "test",
+        0, &r);
+    ASSERT_EQ(rc, 0);
+    ASSERT_NULL(r.error);
+    /* Columns are the requested aliases (top, c) — NOT a 3-column star
+     * projection of f.name/f.qualified_name/f.label. */
+    ASSERT_EQ(r.col_count, 2);
+    ASSERT_STR_EQ(r.columns[0], "top");
+    ASSERT_STR_EQ(r.columns[1], "c");
+    cbm_cypher_result_free(&r);
+
+    cbm_store_close(s);
+    PASS();
+}
+
 /* issue #242: openCypher label alternation in MATCH — (n:A|B). */
 TEST(cypher_exec_label_alternation_issue242) {
     cbm_store_t *s = setup_cypher_store();
@@ -2330,6 +2355,7 @@ SUITE(cypher) {
     RUN_TEST(cypher_exec_where_label_test_issue241);
     RUN_TEST(cypher_exec_label_alternation_issue242);
     RUN_TEST(cypher_exec_count_distinct_issue239);
+    RUN_TEST(cypher_exec_unsupported_with_expr_resync_issue373);
     RUN_TEST(cypher_exec_inline_props);
     RUN_TEST(cypher_parse_where_starts_with);
     RUN_TEST(cypher_parse_where_contains);

@@ -1311,6 +1311,29 @@ static int parse_return_item(parser_t *p, cbm_return_item_t *item) {
     if (rc < 0) {
         return CBM_NOT_FOUND;
     }
+    /* An unknown function call / indexed expression after a bare identifier
+     * (e.g. split(f.path,'/')[0]) is not evaluated, but its balanced
+     * parentheses/brackets MUST be consumed so the parser stays in sync. Left
+     * unconsumed, the trailing tokens desynced the parser into a misleading
+     * default star projection (wrong columns, blank rows) (#373). The column
+     * keeps its alias and simply projects empty. */
+    if (!item->func && !item->kase) {
+        while (check(p, TOK_LPAREN) || check(p, TOK_LBRACKET)) {
+            cbm_token_type_t open = peek(p)->type;
+            cbm_token_type_t close = (open == TOK_LPAREN) ? TOK_RPAREN : TOK_RBRACKET;
+            advance(p);
+            int depth = 1;
+            while (depth > 0 && !check(p, TOK_EOF)) {
+                cbm_token_type_t t = peek(p)->type;
+                if (t == open) {
+                    depth++;
+                } else if (t == close) {
+                    depth--;
+                }
+                advance(p);
+            }
+        }
+    }
     /* Optional AS alias */
     if (match(p, TOK_AS)) {
         const cbm_token_t *alias = expect(p, TOK_IDENT);
