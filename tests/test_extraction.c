@@ -214,6 +214,35 @@ TEST(extract_luau_issue39) {
     PASS();
 }
 
+/* --- QML: AST -> graph visitor (Qt, #42) --- */
+TEST(extract_qml_issue42) {
+    CBMFileResult *r = extract("import QtQuick 2.15\n"
+                               "\n"
+                               "Rectangle {\n"
+                               "    id: root\n"
+                               "    width: 100\n"
+                               "    property int counter: 0\n"
+                               "    signal clicked(int value)\n"
+                               "\n"
+                               "    function increment() {\n"
+                               "        counter += 1\n"
+                               "        compute(counter)\n"
+                               "    }\n"
+                               "\n"
+                               "    function compute(n) {\n"
+                               "        return n * 2\n"
+                               "    }\n"
+                               "}\n",
+                               CBM_LANG_QML, "app", "Main.qml");
+    ASSERT_NOT_NULL(r);
+    ASSERT_FALSE(r->has_error);
+    ASSERT(has_def(r, "Function", "increment"));
+    ASSERT(has_def(r, "Function", "compute"));
+    ASSERT(has_call(r, "compute"));
+    cbm_free_result(r);
+    PASS();
+}
+
 /* --- Java --- */
 TEST(java_class) {
     CBMFileResult *r = extract(
@@ -2488,6 +2517,7 @@ SUITE(extraction) {
     RUN_TEST(extract_gdscript_issue186);
     RUN_TEST(extract_powershell_issue35);
     RUN_TEST(extract_luau_issue39);
+    RUN_TEST(extract_qml_issue42);
 
     /* OOP */
     RUN_TEST(java_class);

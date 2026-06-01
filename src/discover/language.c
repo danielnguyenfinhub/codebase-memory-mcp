@@ -430,6 +430,9 @@ static const ext_entry_t EXT_TABLE[] = {
     /* Luau */
     {".luau", CBM_LANG_LUAU},
 
+    /* Qt QML */
+    {".qml", CBM_LANG_QML},
+
     /* Mermaid */
     {".mermaid", CBM_LANG_MERMAID},
 
@@ -749,6 +752,7 @@ static const char *LANG_NAMES[CBM_LANG_COUNT] = {
     [CBM_LANG_HARE] = "Hare",
     [CBM_LANG_PONY] = "Pony",
     [CBM_LANG_LUAU] = "Luau",
+    [CBM_LANG_QML] = "QML",
     [CBM_LANG_JANET] = "Janet",
     [CBM_LANG_SWAY] = "Sway",
     [CBM_LANG_NASM] = "NASM",

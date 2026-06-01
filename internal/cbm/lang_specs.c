@@ -98,6 +98,7 @@ extern const TSLanguage *tree_sitter_teal(void);
 extern const TSLanguage *tree_sitter_hare(void);
 extern const TSLanguage *tree_sitter_pony(void);
 extern const TSLanguage *tree_sitter_luau(void);
+extern const TSLanguage *tree_sitter_qmljs(void);
 extern const TSLanguage *tree_sitter_janet_simple(void);
 extern const TSLanguage *tree_sitter_sway(void);
 extern const TSLanguage *tree_sitter_nasm(void);
@@ -248,6 +249,20 @@ static const char *ts_class_types[] = {"class_declaration",
                                        "internal_module",
                                        NULL};
 static const char *ts_decorator_types[] = {"decorator", NULL};
+
+// ==================== QML (Qt) ====================
+// QMLJS grammar is a TypeScript superset plus declarative ui_* nodes, so the
+// JS/TS function, call, branch, variable and module arrays are reused as-is.
+static const char *qml_class_types[] = {"class_declaration",
+                                        "class",
+                                        "abstract_class_declaration",
+                                        "enum_declaration",
+                                        "interface_declaration",
+                                        "ui_inline_component",
+                                        NULL};
+static const char *qml_field_types[] = {"ui_property", "ui_signal", "public_field_definition",
+                                        NULL};
+static const char *qml_import_types[] = {"import_statement", "import", "ui_import", NULL};
 
 // ==================== RUST ====================
 static const char *rust_func_types[] = {"function_item", "function_signature_item",
@@ -1937,6 +1952,13 @@ static const CBMLangSpec lang_specs[CBM_LANG_COUNT] = {
                            gdscript_import_types, empty_types, gdscript_branch_types,
                            gdscript_var_types, gdscript_assign_types, empty_types, NULL,
                            gdscript_decorator_types, NULL, NULL, tree_sitter_gdscript, NULL},
+
+    // CBM_LANG_QML
+    [CBM_LANG_QML] =
+        {CBM_LANG_QML, ts_func_types, qml_class_types, qml_field_types, js_module_types,
+         js_call_types, qml_import_types, qml_import_types, js_branch_types, js_var_types,
+         (const char *[]){"assignment_expression", "augmented_assignment_expression", NULL},
+         js_throw_types, NULL, ts_decorator_types, NULL, NULL, tree_sitter_qmljs, NULL},
 
     // CBM_LANG_GLEAM
     [CBM_LANG_GLEAM] = {CBM_LANG_GLEAM, gleam_func_types, gleam_class_types, gleam_field_types,

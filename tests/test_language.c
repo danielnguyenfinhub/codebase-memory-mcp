@@ -748,6 +748,11 @@ TEST(lang_ext_luau) {
     PASS();
 }
 
+TEST(lang_ext_qml) {
+    ASSERT_EQ(cbm_language_for_extension(".qml"), CBM_LANG_QML);
+    PASS();
+}
+
 TEST(lang_ext_janet) {
     ASSERT_EQ(cbm_language_for_extension(".janet"), CBM_LANG_JANET);
     PASS();
@@ -1216,6 +1221,7 @@ SUITE(language) {
     RUN_TEST(lang_ext_hare);
     RUN_TEST(lang_ext_pony);
     RUN_TEST(lang_ext_luau);
+    RUN_TEST(lang_ext_qml);
     RUN_TEST(lang_ext_janet);
     RUN_TEST(lang_ext_sway);
     RUN_TEST(lang_ext_nasm);

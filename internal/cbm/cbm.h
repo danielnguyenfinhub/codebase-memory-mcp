@@ -167,6 +167,7 @@ typedef enum {
     CBM_LANG_KUSTOMIZE, // kustomization.yaml — Kubernetes overlay tool
     CBM_LANG_K8S,       // Generic Kubernetes manifest (apiVersion: detected)
     CBM_LANG_PINE,      // Pine Script (TradingView indicator / strategy language)
+    CBM_LANG_QML,       // Qt QML (Qt Modeling Language — declarative UI + embedded JS)
     CBM_LANG_COUNT
 } CBMLanguage;
 
