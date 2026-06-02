@@ -612,7 +612,10 @@ static TSNode resolve_func_name(TSNode node, CBMLanguage lang) {
             return name;
         }
 
-        if (lang == CBM_LANG_SWIFT && strcmp(kind, "function_declaration") == 0) {
+        /* Swift and newer tree-sitter-kotlin: function_declaration has no `name`
+         * field; the function name is a `simple_identifier` child. */
+        if ((lang == CBM_LANG_SWIFT || lang == CBM_LANG_KOTLIN) &&
+            strcmp(kind, "function_declaration") == 0) {
             TSNode si = cbm_find_child_by_kind(node, "simple_identifier");
             if (!ts_node_is_null(si)) {
                 return si;
@@ -672,7 +675,7 @@ static bool is_js_exported(TSNode node) {
 // Check if a node is a comment node type.
 static bool is_comment_node(const char *kind) {
     return (strcmp(kind, "comment") == 0 || strcmp(kind, "block_comment") == 0 ||
-            strcmp(kind, "line_comment") == 0);
+            strcmp(kind, "line_comment") == 0 || strcmp(kind, "multiline_comment") == 0);
 }
 
 // Extract comment text, truncating to MAX_COMMENT_LEN.
@@ -1979,8 +1982,10 @@ static void extract_class_def(CBMExtractCtx *ctx, TSNode node, const CBMLangSpec
     if (ts_node_is_null(name_node) && ctx->language == CBM_LANG_OBJC) {
         name_node = cbm_find_child_by_kind(node, "identifier");
     }
-    // Swift: class name is type_identifier child (no "name" field)
-    if (ts_node_is_null(name_node) && ctx->language == CBM_LANG_SWIFT) {
+    // Swift and newer tree-sitter-kotlin: class/object name is a type_identifier
+    // child (no "name" field).
+    if (ts_node_is_null(name_node) &&
+        (ctx->language == CBM_LANG_SWIFT || ctx->language == CBM_LANG_KOTLIN)) {
         name_node = cbm_find_child_by_kind(node, "type_identifier");
     }
     // Protobuf: service_name / message_name / enum_name children
@@ -2223,7 +2228,8 @@ static TSNode resolve_method_name(TSNode child, CBMLanguage lang) {
         return cbm_find_child_by_kind(child, "identifier");
     }
 
-    if (lang == CBM_LANG_SWIFT && strcmp(ck, "function_declaration") == 0) {
+    if ((lang == CBM_LANG_SWIFT || lang == CBM_LANG_KOTLIN) &&
+        strcmp(ck, "function_declaration") == 0) {
         return cbm_find_child_by_kind(child, "simple_identifier");
     }
 

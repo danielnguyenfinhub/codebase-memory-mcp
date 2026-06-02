@@ -96,6 +96,11 @@ static TSNode resolve_func_name_node(TSNode node) {
             name_node = ts_node_child_by_field_name(parent, TS_FIELD("name"));
         }
     }
+    /* Grammars without a `name` field (e.g. newer tree-sitter-kotlin): the
+     * function name is a simple_identifier child of function_declaration. */
+    if (ts_node_is_null(name_node) && strcmp(ts_node_type(node), "function_declaration") == 0) {
+        name_node = cbm_find_child_by_kind(node, "simple_identifier");
+    }
     return name_node;
 }
 
@@ -126,6 +131,10 @@ static const char *compute_func_qn(CBMExtractCtx *ctx, TSNode node, const CBMLan
 // Compute class QN for scope tracking.
 static const char *compute_class_qn(CBMExtractCtx *ctx, TSNode node) {
     TSNode name_node = ts_node_child_by_field_name(node, TS_FIELD("name"));
+    /* Newer tree-sitter-kotlin: class/object name is a type_identifier child. */
+    if (ts_node_is_null(name_node) && ctx->language == CBM_LANG_KOTLIN) {
+        name_node = cbm_find_child_by_kind(node, "type_identifier");
+    }
     if (ts_node_is_null(name_node)) {
         return NULL;
     }
