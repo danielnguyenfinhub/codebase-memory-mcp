@@ -360,6 +360,12 @@ _nonnull_(1) static void state_deserialize(
     DBG("error: no buffer but buffer length > 0");
     return;
   }
+  /* Empty/absent buffer: nothing to deserialize. Return early so we never
+   * pass a null/zero-length pointer to indent_vec_deserialize's nonnull arg. */
+  if (!buffer || buffer_len == 0) {
+    state_clear(self);
+    return;
+  }
 
   unsigned idx = 0;
   state_clear(self);
