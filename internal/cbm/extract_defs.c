@@ -5175,6 +5175,113 @@ static void extract_lisp_def(CBMExtractCtx *ctx, TSNode node) {
     cbm_defs_push(&ctx->result->defs, a, def);
 }
 
+/* Kotlin ERROR-node class recovery.
+ *
+ * The vendored fwcd tree-sitter-kotlin (commit 93bfeee) fails to parse two
+ * member-modifier constructs and wraps the WHOLE enclosing class in a single
+ * `ERROR` node, so the outer class is never recognized as a `class_declaration`
+ * and disappears from the graph:
+ *
+ *   class MyClass { companion object : Factory<MyClass>() { ... } }   // anon companion w/ delegation
+ *   class Tree    { inner class Node : BaseNode() { ... } }            // inner + delegation
+ *
+ * Inside the ERROR node the tokens are still present as a flat child list:
+ *   `class`/`object` keyword token → simple_identifier/type_identifier (name)
+ *   → optional `:` then one or more `delegation_specifier` siblings (bases).
+ *
+ * Recover each named class/object declaration from that flat sequence and emit a
+ * Class definition (with bases) so it is discoverable. Strictly additive and
+ * gated to Kotlin ERROR nodes: an ERROR region is already a broken parse, so
+ * recovering names from it cannot regress a correct parse. Anonymous declarations
+ * (e.g. a `companion object` with no name) are skipped — there is nothing to emit.
+ */
+static void recover_kotlin_error_classes(CBMExtractCtx *ctx, TSNode err_node) {
+    CBMArena *a = ctx->arena;
+    uint32_t cc = ts_node_child_count(err_node);
+    for (uint32_t i = 0; i < cc; i++) {
+        TSNode kw = ts_node_child(err_node, i);
+        const char *kwt = ts_node_type(kw);
+        /* Anonymous `class` / `object` keyword token starts a declaration. */
+        if (strcmp(kwt, "class") != 0 && strcmp(kwt, "object") != 0) {
+            continue;
+        }
+        /* The name is the next child, when it is an identifier token. */
+        if (i + 1 >= cc) {
+            continue;
+        }
+        TSNode name_node = ts_node_child(err_node, i + 1);
+        const char *nt = ts_node_type(name_node);
+        if (strcmp(nt, "simple_identifier") != 0 && strcmp(nt, "type_identifier") != 0) {
+            /* Anonymous declaration (e.g. `companion object :`) — nothing to emit. */
+            continue;
+        }
+        char *name = cbm_node_text(a, name_node, ctx->source);
+        if (!name || !name[0]) {
+            continue;
+        }
+
+        const char *class_qn;
+        if (ctx->enclosing_class_qn) {
+            class_qn = cbm_arena_sprintf(a, "%s.%s", ctx->enclosing_class_qn, name);
+        } else {
+            class_qn = cbm_fqn_compute(a, ctx->project, ctx->rel_path, name);
+        }
+
+        /* Collect bases from any `delegation_specifier` siblings that follow the
+         * name (until the class body `{` or the next class/object keyword). */
+        const char *bases[MAX_BASES];
+        int bcount = 0;
+        for (uint32_t j = i + 2; j < cc && bcount < MAX_BASES_MINUS_1; j++) {
+            TSNode sib = ts_node_child(err_node, j);
+            const char *st = ts_node_type(sib);
+            if (strcmp(st, "{") == 0 || strcmp(st, "class") == 0 || strcmp(st, "object") == 0) {
+                break;
+            }
+            if (strcmp(st, "delegation_specifier") != 0) {
+                continue;
+            }
+            /* delegation_specifier → user_type (directly or under
+             * constructor_invocation) → type_identifier; strip generic args. */
+            TSNode ut = ts_node_named_child(sib, 0);
+            if (!ts_node_is_null(ut) &&
+                strcmp(ts_node_type(ut), "constructor_invocation") == 0) {
+                ut = ts_node_named_child(ut, 0);
+            }
+            if (ts_node_is_null(ut)) {
+                continue;
+            }
+            TSNode ti = ut;
+            if (strcmp(ts_node_type(ut), "user_type") == 0 &&
+                ts_node_named_child_count(ut) > 0) {
+                ti = ts_node_named_child(ut, 0);
+            }
+            push_base_text(a, ti, ctx->source, bases, MAX_BASES_MINUS_1, &bcount);
+        }
+
+        CBMDefinition def;
+        memset(&def, 0, sizeof(def));
+        def.name = name;
+        def.qualified_name = class_qn;
+        def.label = "Class";
+        def.file_path = ctx->rel_path;
+        def.start_line = ts_node_start_point(name_node).row + TS_LINE_OFFSET;
+        def.end_line = ts_node_end_point(err_node).row + TS_LINE_OFFSET;
+        def.is_exported = cbm_is_exported(name, ctx->language);
+        if (bcount > 0) {
+            const char **result = (const char **)cbm_arena_alloc(
+                a, (size_t)(bcount + NULL_TERM) * sizeof(const char *));
+            if (result) {
+                for (int k = 0; k < bcount; k++) {
+                    result[k] = bases[k];
+                }
+                result[bcount] = NULL;
+                def.base_classes = result;
+            }
+        }
+        cbm_defs_push(&ctx->result->defs, a, def);
+    }
+}
+
 static void walk_defs(CBMExtractCtx *ctx, TSNode root, const CBMLangSpec *spec, int depth_unused) {
     (void)depth_unused;
     walk_defs_frame_t stack[CBM_WALK_DEFS_STACK_CAP];
@@ -5186,6 +5293,14 @@ static void walk_defs(CBMExtractCtx *ctx, TSNode root, const CBMLangSpec *spec, 
         TSNode node = frame.node;
         ctx->enclosing_class_qn = frame.enclosing_class_qn;
         const char *kind = ts_node_type(node);
+
+        /* Kotlin: recover class/object declarations the grammar lost inside an
+         * ERROR node (companion-object-with-delegation, inner-class-with-base).
+         * Additive — fall through so child descent still visits any well-formed
+         * subtrees nested in the error region. */
+        if (ctx->language == CBM_LANG_KOTLIN && strcmp(kind, "ERROR") == 0) {
+            recover_kotlin_error_classes(ctx, node);
+        }
 
         if (ctx->language == CBM_LANG_ELIXIR && strcmp(kind, "call") == 0) {
             extract_elixir_call(ctx, node, spec);
